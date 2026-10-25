@@ -7,7 +7,7 @@ if [ -z "${OPENROUTER_API_KEY:-}" ]; then
         "${OPENROUTER_CONFIG_DIR:-/config}/openrouter.toml"
     do
         [ -f "$cfg" ] || continue
-        OPENROUTER_API_KEY="$(python - "$cfg" <<'PY'
+        if ! OPENROUTER_API_KEY="$(python - "$cfg" <<'PY'
 import sys
 
 try:
@@ -15,8 +15,12 @@ try:
 except ModuleNotFoundError:
     import tomli as tomllib
 
-with open(sys.argv[1], "rb") as fh:
-    data = tomllib.load(fh)
+try:
+    with open(sys.argv[1], "rb") as fh:
+        data = tomllib.load(fh)
+except Exception as exc:
+    print(f"warning: cannot parse {sys.argv[1]}: {exc}", file=sys.stderr)
+    raise SystemExit(1)
 
 key = data.get("OPENROUTER_API_KEY") or data.get("openrouter_api_key")
 if not key:
@@ -26,9 +30,18 @@ if not key:
             if key:
                 break
 
-print(key or "", end="")
+print(str(key).strip() if key else "", end="")
 PY
-)"
+        )"; then
+            echo "warning: skipping unreadable API key file $cfg" >&2
+            OPENROUTER_API_KEY=""
+            continue
+        fi
+        if [ -n "$OPENROUTER_API_KEY" ]; then
+            echo "Loaded OpenRouter API key from $cfg" >&2
+        else
+            echo "warning: no API key found in $cfg" >&2
+        fi
         export OPENROUTER_API_KEY
         break
     done

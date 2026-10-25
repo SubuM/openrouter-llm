@@ -14,7 +14,6 @@ from openai import (
 
 from classifier import (
     CATEGORY_MODELS,
-    CATEGORY_OPTIONS,
     CODING,
     EVERYDAY,
     NON_CHAT_MODELS,
@@ -122,46 +121,25 @@ if "messages" not in st.session_state:
     st.session_state.messages = []
 if "category" not in st.session_state:
     st.session_state.category = None
-if "manual_category" not in st.session_state:
-    st.session_state.manual_category = False
 
-if "pending_category" in st.session_state:
-    st.session_state.category = st.session_state.pop("pending_category")
 if st.session_state.pop("reset_model", False):
     st.session_state.pop("model", None)
 
-
-def on_category_change() -> None:
-    st.session_state.manual_category = True
-    st.session_state.pop("detected_category", None)
-    st.session_state.pop("detected_source", None)
-    st.session_state.pop("model", None)
-
-
-category = st.radio(
-    "Category",
-    CATEGORY_OPTIONS,
-    index=None,
-    horizontal=True,
-    key="category",
-    on_change=on_category_change,
-    help=(
-        "The local Qwen2.5-0.5B classifier picks Coding or Everyday from "
-        "your message and reorders the model list. Pick a category here to "
-        "override it."
-    ),
-)
-
+category = st.session_state.get("category")
 detected_category = st.session_state.get("detected_category")
 detected_source = st.session_state.get("detected_source")
-if detected_category and detected_category == category:
-    st.caption(
-        f"Auto-detected **{detected_category}** with the {detected_source}. "
-        "Model list reordered."
-    )
 
 with st.sidebar:
     st.header("Settings")
+
+    if category:
+        st.caption(
+            f"Category: **{category}** (auto, {detected_source or 'local model'})"
+        )
+    else:
+        st.caption(
+            "Category: auto-detected locally on your first message."
+        )
 
     env_key = os.getenv("OPENROUTER_API_KEY", "").strip()
     secret_key = get_secret("OPENROUTER_API_KEY")
@@ -252,8 +230,7 @@ with st.sidebar:
         st.session_state.pop("detected_source", None)
         st.session_state.pop("pending_prompt", None)
         st.session_state.pop("prompt_classified", None)
-        st.session_state["manual_category"] = False
-        st.session_state["pending_category"] = None
+        st.session_state["category"] = None
         st.session_state["reset_model"] = True
         st.rerun()
 
@@ -287,18 +264,18 @@ typed_prompt = st.chat_input("Ask about coding or anything else...")
 prompt = st.session_state.pop("pending_prompt", None) or typed_prompt
 
 if prompt:
-    if not st.session_state.get("manual_category", False):
-        already_classified = st.session_state.pop("prompt_classified", False)
-        if not already_classified:
-            with st.spinner("Choosing Coding or Everyday..."):
-                detected, source = classify_category(prompt)
-            st.session_state["detected_category"] = detected
-            st.session_state["detected_source"] = source
-            if detected != st.session_state.get("category"):
-                st.session_state["pending_category"] = detected
-                st.session_state["pending_prompt"] = prompt
-                st.session_state["prompt_classified"] = True
-                st.rerun()
+    already_classified = st.session_state.pop("prompt_classified", False)
+    if not already_classified:
+        with st.spinner("Choosing Coding or Everyday locally..."):
+            detected, source = classify_category(prompt)
+        st.session_state["detected_category"] = detected
+        st.session_state["detected_source"] = source
+        if detected != st.session_state.get("category"):
+            st.session_state["category"] = detected
+            st.session_state.pop("model", None)
+            st.session_state["pending_prompt"] = prompt
+            st.session_state["prompt_classified"] = True
+            st.rerun()
 
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
