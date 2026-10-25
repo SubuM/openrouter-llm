@@ -12,7 +12,7 @@ services:
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
       OPENROUTER_BASE_URL: ${OPENROUTER_BASE_URL:-https://openrouter.ai/api/v1}
       OPENROUTER_CONFIG_DIR: /config
-      LOCAL_MODEL_PATH: /models/qwen2.5-0.5b-instruct-q4_k_m.gguf
+      LOCAL_MODEL_PATH: /models/bge-small-en-v1.5-f16.gguf
       LOCAL_MODEL_THREADS: ${LOCAL_MODEL_THREADS:-3}
     volumes:
       - ./:/config:ro

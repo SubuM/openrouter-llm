@@ -18,7 +18,6 @@ from classifier import (
     EVERYDAY,
     NON_CHAT_MODELS,
     classify_category,
-    local_model_ready,
 )
 
 load_dotenv()
@@ -27,6 +26,7 @@ BASE_URL = os.getenv("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1").rstr
     "/"
 )
 DEFAULT_MODEL = "nvidia/nemotron-3.5-super-vl:free"
+AVATARS = {"user": "🧑", "assistant": "🤖"}
 DEFAULT_SYSTEM_PROMPT = (
     "You are a helpful, precise assistant for coding and everyday tasks. "
     "When writing code, prefer complete, runnable examples and explain key "
@@ -35,7 +35,7 @@ DEFAULT_SYSTEM_PROMPT = (
     "before guessing. Be concise unless the user asks for depth."
 )
 
-st.set_page_config(page_title="OpenRouter Chat", layout="centered")
+st.set_page_config(page_title="Personal Chat", layout="centered")
 
 
 @st.cache_data(ttl=3600, show_spinner=False)
@@ -114,8 +114,7 @@ def delta_text(delta, field: str) -> str | None:
     return value
 
 
-st.title("OpenRouter Chat")
-st.caption(f"Chat with free OpenRouter models, e.g. `{DEFAULT_MODEL}`")
+st.title("Personal Chat")
 
 if "messages" not in st.session_state:
     st.session_state.messages = []
@@ -126,20 +125,9 @@ if st.session_state.pop("reset_model", False):
     st.session_state.pop("model", None)
 
 category = st.session_state.get("category")
-detected_category = st.session_state.get("detected_category")
-detected_source = st.session_state.get("detected_source")
 
 with st.sidebar:
     st.header("Settings")
-
-    if category:
-        st.caption(
-            f"Category: **{category}** (auto, {detected_source or 'local model'})"
-        )
-    else:
-        st.caption(
-            "Category: auto-detected locally on your first message."
-        )
 
     env_key = os.getenv("OPENROUTER_API_KEY", "").strip()
     secret_key = get_secret("OPENROUTER_API_KEY")
@@ -226,8 +214,6 @@ with st.sidebar:
 
     if st.button("Clear conversation", use_container_width=True):
         st.session_state.messages = []
-        st.session_state.pop("detected_category", None)
-        st.session_state.pop("detected_source", None)
         st.session_state.pop("pending_prompt", None)
         st.session_state.pop("prompt_classified", None)
         st.session_state["category"] = None
@@ -235,19 +221,13 @@ with st.sidebar:
         st.rerun()
 
     st.divider()
-    if local_model_ready():
-        st.caption("Context classifier: Qwen2.5-0.5B-Instruct (local)")
-    else:
-        st.caption(
-            "Context classifier: keyword fallback (local model not found)"
-        )
     st.caption(
         "Free models can be rate-limited. If one is busy, pick another from "
         "the list."
     )
 
 for message in st.session_state.messages:
-    with st.chat_message(message["role"]):
+    with st.chat_message(message["role"], avatar=AVATARS[message["role"]]):
         reasoning = message.get("reasoning")
         if reasoning:
             with st.expander("Reasoning"):
@@ -266,10 +246,7 @@ prompt = st.session_state.pop("pending_prompt", None) or typed_prompt
 if prompt:
     already_classified = st.session_state.pop("prompt_classified", False)
     if not already_classified:
-        with st.spinner("Choosing Coding or Everyday locally..."):
-            detected, source = classify_category(prompt)
-        st.session_state["detected_category"] = detected
-        st.session_state["detected_source"] = source
+        detected, _ = classify_category(prompt)
         if detected != st.session_state.get("category"):
             st.session_state["category"] = detected
             st.session_state.pop("model", None)
@@ -278,7 +255,7 @@ if prompt:
             st.rerun()
 
     st.session_state.messages.append({"role": "user", "content": prompt})
-    with st.chat_message("user"):
+    with st.chat_message("user", avatar=AVATARS["user"]):
         st.markdown(prompt)
 
     extra_body = (
@@ -287,7 +264,7 @@ if prompt:
         else None
     )
 
-    with st.chat_message("assistant"):
+    with st.chat_message("assistant", avatar=AVATARS["assistant"]):
         try:
             history = [
                 {"role": message["role"], "content": message["content"]}

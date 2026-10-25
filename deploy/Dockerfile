@@ -3,13 +3,13 @@
 FROM python:3.12-slim-bookworm
 
 ARG TARGETARCH
-ARG LOCAL_MODEL_URL="https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct-GGUF/resolve/main/qwen2.5-0.5b-instruct-q4_k_m.gguf"
-ARG LOCAL_MODEL_SHA256="74a4da8c9fdbcd15bd1f6d01d621410d31c6fc00986f5eb687824e7b93d7a9db"
+ARG LOCAL_MODEL_URL="https://huggingface.co/CompendiumLabs/bge-small-en-v1.5-gguf/resolve/main/bge-small-en-v1.5-f16.gguf"
+ARG LOCAL_MODEL_SHA256="f0b2fef971e8366438bfd2d9aefea1b0115919389448806d290237f638bae999"
 
 ENV PIP_NO_CACHE_DIR=1 \
     PYTHONUNBUFFERED=1 \
     HOME=/home/appuser \
-    LOCAL_MODEL_PATH=/models/qwen2.5-0.5b-instruct-q4_k_m.gguf \
+    LOCAL_MODEL_PATH=/models/bge-small-en-v1.5-f16.gguf \
     OPENROUTER_CONFIG_DIR=/config \
     STREAMLIT_SERVER_HEADLESS=true \
     STREAMLIT_BROWSER_GATHER_USAGE_STATS=false

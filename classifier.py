@@ -2,6 +2,8 @@ import os
 import re
 from functools import lru_cache
 
+import numpy as np
+
 CODING = "Coding"
 EVERYDAY = "Everyday"
 CATEGORY_OPTIONS = [CODING, EVERYDAY]
@@ -31,25 +33,38 @@ NON_CHAT_MODELS = {
     "nvidia/nemotron-3.5-embed-1b:free",
 }
 
-DEFAULT_MODEL_PATH = "/models/qwen2.5-0.5b-instruct-q4_k_m.gguf"
-MAX_CLASSIFIER_CHARS = 4000
+DEFAULT_MODEL_PATH = "/models/bge-small-en-v1.5-f16.gguf"
+MAX_CLASSIFIER_CHARS = 2000
 
-CLASSIFIER_SYSTEM_PROMPT = (
-    "You route each user request into exactly one category.\n"
-    "CODING - programming, software engineering, debugging, code review, "
-    "APIs, databases, SQL, DevOps, algorithms, data science, or developer "
-    "tooling.\n"
-    "EVERYDAY - general knowledge, writing, planning, travel, health, food, "
-    "finance, relationships, errands, or casual conversation.\n"
-    "Examples:\n"
-    "- Refactor this Python function -> CODING\n"
-    "- Find the bug in my SQL query -> CODING\n"
-    "- Plan a three-day trip to Kyoto -> EVERYDAY\n"
-    "- Write a birthday message for my sister -> EVERYDAY\n"
-    "Answer with only CODING or EVERYDAY."
-)
+CODING_EXEMPLARS = [
+    "programming software code debugging",
+    "write a Python function",
+    "find a bug in SQL",
+    "center a div with CSS",
+    "configure nginx as a reverse proxy",
+    "Kubernetes ingress Docker container",
+    "refactor a bash script",
+    "React useEffect hook",
+    "CI/CD pipeline",
+    "unit tests for TypeScript",
+    "API endpoint database schema",
+    "git commit merge rebase",
+]
 
-CLASSIFIER_GRAMMAR = 'root ::= "CODING" | "EVERYDAY"'
+EVERYDAY_EXEMPLARS = [
+    "plan a trip itinerary",
+    "birthday message for a friend",
+    "cook dinner recipe",
+    "improve sleep health",
+    "email landlord about repairs",
+    "beginner workout exercise",
+    "summarize the news",
+    "budget groceries money",
+    "recommend a movie to watch",
+    "take care of a pet cat",
+    "write a poem",
+    "family relationship advice",
+]
 
 _CODING_HINTS = {
     "algorithm",
@@ -298,8 +313,9 @@ def _load_local_model(model_path: str):
     try:
         return Llama(
             model_path=model_path,
-            n_ctx=2048,
-            n_batch=256,
+            embedding=True,
+            n_ctx=512,
+            n_batch=512,
             n_threads=threads,
             verbose=False,
         )
@@ -307,11 +323,29 @@ def _load_local_model(model_path: str):
         return None
 
 
-@lru_cache(maxsize=1)
-def _classifier_grammar():
-    from llama_cpp import LlamaGrammar
+def _embed(model, text: str) -> np.ndarray:
+    result = model.create_embedding(text[:MAX_CLASSIFIER_CHARS])
+    vector = np.asarray(result["data"][0]["embedding"], dtype=np.float32)
+    norm = float(np.linalg.norm(vector))
+    return vector / norm if norm else vector
 
-    return LlamaGrammar.from_string(CLASSIFIER_GRAMMAR, verbose=False)
+
+@lru_cache(maxsize=1)
+def _category_centroids(model_path: str):
+    model = _load_local_model(model_path)
+    if model is None:
+        return None
+
+    centroids = {}
+    for category, exemplars in (
+        (CODING, CODING_EXEMPLARS),
+        (EVERYDAY, EVERYDAY_EXEMPLARS),
+    ):
+        vectors = np.stack([_embed(model, text) for text in exemplars])
+        centroid = vectors.mean(axis=0)
+        norm = float(np.linalg.norm(centroid))
+        centroids[category] = centroid / norm if norm else centroid
+    return centroids
 
 
 def _keyword_scores(text: str) -> tuple[int, int]:
@@ -340,23 +374,17 @@ def classify_category(prompt: str) -> tuple[str, str]:
         return EVERYDAY, "default"
 
     text = text[:MAX_CLASSIFIER_CHARS]
-    model = _load_local_model(classifier_model_path())
+    model_path = classifier_model_path()
+    model = _load_local_model(model_path)
     if model is not None:
         try:
-            result = model.create_chat_completion(
-                messages=[
-                    {"role": "system", "content": CLASSIFIER_SYSTEM_PROMPT},
-                    {"role": "user", "content": text},
-                ],
-                max_tokens=8,
-                temperature=0.0,
-                grammar=_classifier_grammar(),
-            )
-            answer = result["choices"][0]["message"]["content"].strip().upper()
-            if answer.startswith("CODING"):
+            centroids = _category_centroids(model_path)
+            vector = _embed(model, text)
+            if float(vector @ centroids[CODING]) > float(
+                vector @ centroids[EVERYDAY]
+            ):
                 return CODING, "local model"
-            if answer.startswith("EVERYDAY"):
-                return EVERYDAY, "local model"
+            return EVERYDAY, "local model"
         except Exception:
             pass
 
