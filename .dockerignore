@@ -1,0 +1,17 @@
+.git
+.gitignore
+.dockerignore
+.env
+.env.*
+.streamlit/secrets.toml
+deploy/.env
+deploy/.env.*
+deploy/secrets.toml
+deploy/openrouter.toml
+.venv
+venv
+__pycache__
+*.py[cod]
+*.gguf
+models/
+.DS_Store

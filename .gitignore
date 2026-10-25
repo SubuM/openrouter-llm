@@ -218,3 +218,9 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Deployment secrets
+deploy/.env
+deploy/.env.*
+deploy/secrets.toml
+deploy/openrouter.toml
